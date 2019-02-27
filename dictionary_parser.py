@@ -1,6 +1,7 @@
 import xml.etree.ElementTree
 import logging
 import unicodedata
+from collections import defaultdict
 
 SCHEMA_PREFIX = '{http://openscriptures.github.com/morphhb/namespace}'
 ENTRY_TYPE = SCHEMA_PREFIX + 'entry'
@@ -41,10 +42,7 @@ class DictionaryEntry(object):
             self.pos = pos.text
 
     def dict_key(self):
-        if self.word_vowelless and self.meaning:
-            return (self.word_vowelless, self.meaning)
-        else:
-            return None
+        return self.word_vowelless
 
     def missing_attributes(self):
         return [attr for attr in self.__slots__ if getattr(self, attr) is None]
@@ -63,7 +61,7 @@ class DictionaryParser(object):
     def construct_dictionary(self):
         tree = xml.etree.ElementTree.parse(self.file_name)
         root = tree.getroot()
-        dictionary = {}
+        dictionary = defaultdict(list)
         entry_counter = 0
         for entry in root.iter('{http://openscriptures.github.com/morphhb/namespace}entry'):
             entry_object = self.processEntry(entry)
@@ -71,15 +69,11 @@ class DictionaryParser(object):
             if entry_object:
                 key = entry_object.dict_key()
                 if key:
-                    if key in dictionary:
-                        self.logger.error(str(key) + ' encountered twice')
-                    else:
-                        dictionary[key] = entry_object
+                    dictionary[key].append(entry_object)
                 else:
                     self.logger.error("Could not generate key for entry with id "+entry_object.dict_id)
 
         self.logger.info("Scanned " + str(entry_counter) + " raw entries")
-        complete_entries = sum(1 for entry in dictionary.values() if entry.is_complete_entry())
         self.logger.info("Generated " + str(len(dictionary)) + " dictionary entries")
         return dictionary
 
