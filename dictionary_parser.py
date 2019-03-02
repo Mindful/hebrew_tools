@@ -60,7 +60,8 @@ class DictionaryParser(object):
 
     def construct_dictionary(self):
         tree = xml.etree.ElementTree.parse(self.file_name)
-        root = tree.getroot()
+        root = next(part for part in tree.getroot().iter('{http://openscriptures.github.com/morphhb/namespace}part') if
+                    part.attrib['{http://www.w3.org/XML/1998/namespace}lang'] == 'heb')
         dictionary = defaultdict(list)
         entry_counter = 0
         for entry in root.iter('{http://openscriptures.github.com/morphhb/namespace}entry'):
