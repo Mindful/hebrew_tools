@@ -6,6 +6,9 @@ from collections import defaultdict
 LEXICAL_INDEX = 'LexicalIndex.xml'
 BROWN_DRIVER_BRIGGS = 'BrownDriverBriggs.xml'
 
+GENDER_MALE = 'male'
+GENDER_FEMALE = 'female'
+
 SCHEMA_PREFIX = '{http://openscriptures.github.com/morphhb/namespace}'
 ENTRY_TYPE = SCHEMA_PREFIX + 'entry'
 PART_TYPE = SCHEMA_PREFIX + 'part'
@@ -38,6 +41,7 @@ class DictionaryEntry(object):
     __slots__ = ('dict_id', 'word', 'word_vowelless', 'pronunciation', 'meaning', 'pos', 'gender')
 
     def __init__(self, dict_id, word, meaning, pos, gender):
+        #TODO: what's checked for none here vs not checked for none is coupled with the logic in process_entry, which is code smell
         for attr in self.__slots__:
             setattr(self, attr, None)
         self.dict_id = dict_id
@@ -49,7 +53,7 @@ class DictionaryEntry(object):
             self.meaning = meaning.text.lower()
         if pos is not None:
             self.pos = pos.text
-        #TODO: gender
+        self.gender = gender
 
     def dict_key(self):
         return self.word_vowelless
@@ -80,6 +84,20 @@ class DictionaryParser(object):
 
         return dictionary
 
+    def gender_from_bdb_pos(self, pos_string):
+        male = (pos_string == 'm' or 'm.' in pos_string or '.m' in pos_string)
+        female = (pos_string == 'f' or 'f.' in pos_string or '.f' in pos_string)
+
+        if male:
+            if female:
+                self.logger.error("Part of speech string "+pos_string+" appears to include both genders")
+                return None
+            else:
+                return GENDER_MALE
+        elif female:
+            return GENDER_FEMALE
+        else:
+            return None
 
     def construct_dictionary(self):
         self.brown_driver_briggs = self.process_bdb()
@@ -89,7 +107,7 @@ class DictionaryParser(object):
         dictionary = defaultdict(list)
         entry_counter = 0
         for entry in hebrew_root.iter(ENTRY_TYPE):
-            entry_object = self.processEntry(entry)
+            entry_object = self.process_entry(entry)
             entry_counter += 1
             if entry_object:
                 key = entry_object.dict_key()
@@ -102,13 +120,14 @@ class DictionaryParser(object):
         self.logger.info("Generated " + str(len(dictionary)) + " dictionary entries")
         return dictionary
 
-    def processEntry(self, entry):
+    def process_entry(self, entry):
         dict_id = entry.attrib[ENTRY_ID]
 
         word = entry.find(ENTRY_WORD)
         pos = entry.find(ENTRY_POS)
         definition = entry.find(ENTRY_DEFINITION)
         xref = entry.find(ENTRY_XREF)
+        gender = None
 
         for sub_element in [(word, 'word'), (pos, 'part of speech'), (definition, 'definition'),
                             (xref, 'external references')]:
@@ -119,10 +138,11 @@ class DictionaryParser(object):
             bdb_entry = self.brown_driver_briggs[xref.attrib['bdb']]
             bdb_pos = bdb_entry.find(ENTRY_POS)
             if bdb_pos is not None:
-                print("derpy")
+                gender = self.gender_from_bdb_pos(bdb_pos.text)
 
+        #TODO: if this is some kind of noun and we can't find a gender we should log a warning
 
-        result = DictionaryEntry(dict_id, word, definition, pos, xref.attrib)
+        result = DictionaryEntry(dict_id, word, definition, pos, gender)
         return result
 
 
